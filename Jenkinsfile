@@ -41,7 +41,7 @@ pipeline {
                 sh '''
                     set -e
 
-                    mkdir -p "$DEPLOY_DIR"
+                    sudo /usr/bin/mkdir -p "$DEPLOY_DIR"
 
                     # Copy application files without replacing
                     # the server's .env or copying node_modules.
