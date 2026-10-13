@@ -37,20 +37,6 @@ pipeline {
                 }
             }
         }
-        stage('Check Workspace') {
-    steps {
-        sh '''
-            echo "Jenkins workspace:"
-            pwd
-
-            echo "Workspace contents:"
-            ls -la
-
-            echo "Server directory:"
-            find "$WORKSPACE" -maxdepth 3 -type f -name package.json
-        '''
-    }
-}
 
         stage('Deploy') {
             steps {
@@ -79,7 +65,7 @@ pipeline {
                             -e "ssh -i $SSH_KEY -p 2222 -o BatchMode=yes -o StrictHostKeyChecking=yes" \
                             --exclude='.env' \
                             --exclude='node_modules/' \
-                            "$DEPLOY_DIR/" \
+                            "$WORKSPACE/server/" \
                             "$SSH_USER@$SERVER_IP:/var/www/html/api/task-board-api/"
 
                         echo "Installing production dependencies and restarting application..."
