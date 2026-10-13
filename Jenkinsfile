@@ -2,7 +2,7 @@ pipeline {
     agent any
 
     environment {
-        DEPLOY_DIR = '/var/www/html/api/task-board-api'
+        DEPLOY_DIR = '/home/jenkins/apps/task-board/server'
         PM2_NAME   = 'task-board-api'
         DEPLOY_PORT = '4000'
     }
@@ -39,12 +39,7 @@ pipeline {
         stage('Deploy') {
             steps {
                 sh '''
-                    set -e
-                    whoami
-                    id
-                    hostname
-                    sudo -n -l
-                    sudo /usr/bin/mkdir -p /var/www/html/api/task-board-api
+                    mkdir -p "$DEPLOY_DIR"
 
                     # Copy application files without replacing
                     # the server's .env or copying node_modules.
