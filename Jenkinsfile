@@ -37,6 +37,20 @@ pipeline {
                 }
             }
         }
+        stage('Check Workspace') {
+    steps {
+        sh '''
+            echo "Jenkins workspace:"
+            pwd
+
+            echo "Workspace contents:"
+            ls -la
+
+            echo "Server directory:"
+            find "$WORKSPACE" -maxdepth 3 -type f -name package.json
+        '''
+    }
+}
 
         stage('Deploy') {
             steps {
