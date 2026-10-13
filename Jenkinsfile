@@ -40,7 +40,10 @@ pipeline {
             steps {
                 sh '''
                     set -e
-
+                    whoami
+                    id
+                    hostname
+                    sudo -n -l
                     sudo /usr/bin/mkdir -p /var/www/html/api/task-board-api
 
                     # Copy application files without replacing
