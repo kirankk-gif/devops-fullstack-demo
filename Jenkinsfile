@@ -40,32 +40,51 @@ pipeline {
 
         stage('Deploy') {
             steps {
-                sh '''
-                    ssh -p 2222 $USER@$SERVER_IP \
-                           'sudo /usr/bin/mkdir -p /var/www/html/api/task-board-api'
+                withCredentials([
+                    sshUserPrivateKey(
+                        credentialsId: 'ssh-kiran-key',
+                        keyFileVariable: 'SSH_KEY',
+                        usernameVariable: 'SSH_USER'
+                    )
+                ]) {
+                    sh '''
+                        set -e
 
-                    # Copy application files without replacing
-                    # the server's .env or copying node_modules.
-                    rsync -a \
-                        --exclude='.env' \
-                        --exclude='node_modules/' \
-                        "$DEPLOY_DIR/"
+                        echo "Creating deployment directory on production server..."
 
-                    cd "$DEPLOY_DIR"
+                        ssh -i "$SSH_KEY" \
+                            -p 2222 \
+                            -o BatchMode=yes \
+                            -o StrictHostKeyChecking=yes \
+                            "$SSH_USER@$SERVER_IP" \
+                            'sudo -n /usr/bin/mkdir -p /var/www/html/api/task-board-api'
 
-                    # Install production dependencies.
-                    npm install --omit=dev
+                        echo "Copying application files..."
 
-                    # Start the app if absent; otherwise restart it.
-                    if pm2 describe "$PM2_NAME" >/dev/null 2>&1; then
-                        pm2 restart "$PM2_NAME" --update-env
-                    else
-                        pm2 start src/server.js \
-                            --name "$PM2_NAME"
-                    fi
+                        rsync -az \
+                            -e "ssh -i $SSH_KEY -p 2222 -o BatchMode=yes -o StrictHostKeyChecking=yes" \
+                            --exclude='.env' \
+                            --exclude='node_modules/' \
+                            "$DEPLOY_DIR/" \
+                            "$SSH_USER@$SERVER_IP:/var/www/html/api/task-board-api/"
 
-                    pm2 save
-                '''
+                        echo "Installing production dependencies and restarting application..."
+
+                        ssh -i "$SSH_KEY" \
+                            -p 2222 \
+                            -o BatchMode=yes \
+                            -o StrictHostKeyChecking=yes \
+                            "$SSH_USER@$SERVER_IP" \
+                            'cd /var/www/html/api/task-board-api &&
+                            npm install --omit=dev &&
+                            if pm2 describe "$PM2_NAME" >/dev/null 2>&1; then
+                                pm2 restart "$PM2_NAME" --update-env;
+                            else
+                                pm2 start src/server.js --name "$PM2_NAME";
+                            fi &&
+                            pm2 save'
+                    '''
+                }
             }
         }
 
