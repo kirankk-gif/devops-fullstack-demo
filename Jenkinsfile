@@ -5,6 +5,8 @@ pipeline {
         DEPLOY_DIR = '/home/jenkins/apps/task-board/server'
         PM2_NAME   = 'task-board-api'
         DEPLOY_PORT = '4000'
+        USER = 'kiran'
+        SERVER_IP = '192.168.0.84'
     }
 
     stages {
@@ -39,7 +41,8 @@ pipeline {
         stage('Deploy') {
             steps {
                 sh '''
-                    mkdir -p "$DEPLOY_DIR"
+                    ssh -p 2222 $USER@$SERVER_IP \
+                           'sudo /usr/bin/mkdir -p /var/www/html/api/task-board-api'
 
                     # Copy application files without replacing
                     # the server's .env or copying node_modules.
