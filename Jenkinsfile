@@ -41,7 +41,7 @@ pipeline {
                 sh '''
                     set -e
 
-                    sudo /usr/bin/mkdir -p "$DEPLOY_DIR"
+                    sudo /usr/bin/mkdir -p /var/www/html/api/task-board-api
 
                     # Copy application files without replacing
                     # the server's .env or copying node_modules.
