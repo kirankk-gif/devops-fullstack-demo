@@ -67,6 +67,17 @@ pipeline {
                             --exclude='node_modules/' \
                             "$WORKSPACE/server/" \
                             "$SSH_USER@$SERVER_IP:/var/www/html/api/task-board-api/"
+                        
+                        echo "Copying .env file from S3..."
+                        
+                        ssh -i "$SSH_KEY" \
+                            -p 2222 \
+                            -o BatchMode=yes \
+                            -o StrictHostKeyChecking=yes \
+                            "$SSH_USER@$SERVER_IP" \
+                            'aws s3 cp \
+                            s3://kiran-ec2-s3-lab-7f29c1/task-board-api/.env \
+                            /var/www/html/api/task-board-api/.env'
 
                         echo "Installing production dependencies and restarting application..."
 
