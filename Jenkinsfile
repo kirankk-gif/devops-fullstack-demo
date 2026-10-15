@@ -96,7 +96,7 @@ pipeline {
 
                         ssh $SSH_OPTS "$SSH_USER@$SERVER_IP" \
                             "curl --fail --silent --show-error \
-                             http://127.0.0.1:$DEPLOY_PORT/api/health"
+                             http://192.168.0.84:$DEPLOY_PORT/api/health"
 
                         echo "Remote deployment and health check completed."
                     '''
