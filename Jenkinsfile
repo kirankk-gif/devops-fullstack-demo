@@ -5,8 +5,7 @@ pipeline {
         DEPLOY_DIR  = '/var/www/html/api/task-abroad-api'
         PM2_NAME    = 'task-abroad-api'
         DEPLOY_PORT = '4000'
-        SERVER_IP   = '192.168.0.84'
-
+        SERVER_IP   = '3.27.40.177'
         S3_ENV_PATH = 's3://kiran-ec2-s3-lab-7f29c1/task-abroad-api/.env'
     }
 
@@ -63,7 +62,7 @@ pipeline {
                         echo "Copying backend files..."
 
                         rsync -az \
-                            -e "ssh -i $SSH_KEY -p 2222 \
+                            -e "ssh -i $SSH_KEY -p 22 \
                                 -o BatchMode=yes \
                                 -o StrictHostKeyChecking=yes" \
                             --exclude='.env' \
@@ -73,9 +72,13 @@ pipeline {
 
                         echo "Downloading .env from S3..."
 
-                        ssh $SSH_OPTS "$SSH_USER@$SERVER_IP" \
+                        ssh -i "$SSH_KEY" \
+                            -p 22 \
+                            -o BatchMode=yes \
+                            -o StrictHostKeyChecking=yes \
+                            "$SSH_USER@$SERVER_IP" \
                             "aws s3 cp '$S3_ENV_PATH' '$DEPLOY_DIR/.env' &&
-                             chmod 600 '$DEPLOY_DIR/.env'"
+                            chmod 600 '$DEPLOY_DIR/.env'"
 
                         echo "Installing production dependencies and restarting..."
 
@@ -96,7 +99,7 @@ pipeline {
 
                         ssh $SSH_OPTS "$SSH_USER@$SERVER_IP" \
                             "curl --fail --silent --show-error \
-                             http://192.168.0.84:$DEPLOY_PORT/api/health"
+                             http://$SERVER_IP:$DEPLOY_PORT/api/health"
 
                         echo "Remote deployment and health check completed."
                     '''
