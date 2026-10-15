@@ -2,12 +2,12 @@ pipeline {
     agent any
 
     environment {
-        DEPLOY_DIR  = '/var/www/html/api/task-board-api'
-        PM2_NAME    = 'task-board-api'
+        DEPLOY_DIR  = '/var/www/html/api/task-abroad-api'
+        PM2_NAME    = 'task-abroad-api'
         DEPLOY_PORT = '4000'
         SERVER_IP   = '192.168.0.84'
 
-        S3_ENV_PATH = 's3://kiran-ec2-s3-lab-7f29c1/task-board-api/.env'
+        S3_ENV_PATH = 's3://kiran-ec2-s3-lab-7f29c1/task-abroad-api/.env'
     }
 
     stages {
@@ -56,7 +56,7 @@ pipeline {
                             -o StrictHostKeyChecking=yes"
 
                         echo "Creating deployment directory..."
-
+  
                         ssh $SSH_OPTS "$SSH_USER@$SERVER_IP" \
                             "sudo -n /usr/bin/mkdir -p '$DEPLOY_DIR'"
 
