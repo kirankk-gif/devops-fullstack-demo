@@ -50,12 +50,12 @@ pipeline {
                     sh '''
                         set -eu
 
-                        SSH_OPTS="-i $SSH_KEY -p 2222 \
+                        SSH_OPTS="-i $SSH_KEY -p 22 \
                             -o BatchMode=yes \
                             -o StrictHostKeyChecking=yes"
 
                         echo "Creating deployment directory..."
-  
+    
                         ssh $SSH_OPTS "$SSH_USER@$SERVER_IP" \
                             "sudo -n /usr/bin/mkdir -p '$DEPLOY_DIR'"
 
