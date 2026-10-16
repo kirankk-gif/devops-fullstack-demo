@@ -64,7 +64,7 @@ pipeline {
                         rsync -az \
                             -e "ssh -i $SSH_KEY -p 22 \
                                 -o BatchMode=yes \
-                                -o StrictHostKeyChecking=yes" \
+                                -o StrictHostKeyChecking=no" \
                             --exclude='.env' \
                             --exclude='node_modules/' \
                             "$WORKSPACE/server/" \
@@ -75,7 +75,7 @@ pipeline {
                         ssh -i "$SSH_KEY" \
                             -p 22 \
                             -o BatchMode=yes \
-                            -o StrictHostKeyChecking=yes \
+                            -o StrictHostKeyChecking=no \
                             "$SSH_USER@$SERVER_IP" \
                             "aws s3 cp '$S3_ENV_PATH' '$DEPLOY_DIR/.env' &&
                             chmod 600 '$DEPLOY_DIR/.env'"
