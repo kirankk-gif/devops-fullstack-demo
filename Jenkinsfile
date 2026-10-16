@@ -52,7 +52,7 @@ pipeline {
 
                         SSH_OPTS="-i $SSH_KEY -p 22 \
                             -o BatchMode=yes \
-                            -o StrictHostKeyChecking=yes"
+                            -o StrictHostKeyChecking=no"
 
                         echo "Creating deployment directory..."
     
