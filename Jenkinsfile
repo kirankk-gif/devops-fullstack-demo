@@ -5,7 +5,7 @@ pipeline {
         DEPLOY_DIR  = '/var/www/html/api/task-abroad-api'
         PM2_NAME    = 'task-abroad-api'
         DEPLOY_PORT = '4000'
-        SERVER_IP   = '3.27.40.177'
+        SERVER_IP   = '3.25.151.231'
         S3_ENV_PATH = 's3://kiran-ec2-s3-lab-7f29c1/task-abroad-api/.env'
     }
 
