@@ -37,6 +37,65 @@ pipeline {
                 }
             }
         }
+        
+        stage('Setup MongoDB') {
+            steps {
+                withCredentials([
+                    sshUserPrivateKey(
+                        credentialsId: 'ssh-ec2-key',
+                        keyFileVariable: 'SSH_KEY',
+                        usernameVariable: 'SSH_USER'
+                    )
+                ]) {
+                    sh '''
+                        set -eu
+
+                        SSH_OPTS="-i $SSH_KEY -p 22 \
+                            -o BatchMode=yes \
+                            -o StrictHostKeyChecking=yes"
+
+                        ssh $SSH_OPTS "$SSH_USER@$SERVER_IP" 'bash -se' <<'REMOTE'
+                            set -eu
+
+                            if ! command -v mongod >/dev/null 2>&1; then
+                                echo "MongoDB is not installed. Installing MongoDB Community 8.0..."
+
+                                sudo apt-get update
+                                sudo apt-get install -y gnupg curl
+
+                                curl -fsSL https://pgp.mongodb.com/server-8.0.asc |
+                                    sudo gpg --dearmor \
+                                    -o /usr/share/keyrings/mongodb-server-8.0.gpg
+
+                                echo "deb [ arch=amd64,arm64 signed-by=/usr/share/keyrings/mongodb-server-8.0.gpg ] https://repo.mongodb.org/apt/ubuntu noble/mongodb-org/8.0 multiverse" |
+                                    sudo tee /etc/apt/sources.list.d/mongodb-org-8.0.list
+
+                                sudo apt-get update
+                                sudo apt-get install -y mongodb-org
+                            else
+                                echo "MongoDB is already installed."
+                            fi
+
+                            sudo systemctl enable --now mongod
+
+                            for i in $(seq 1 15); do
+                                if mongosh --quiet \
+                                    "mongodb://127.0.0.1:27017/admin" \
+                                    --eval 'db.runCommand({ ping: 1 }).ok' |
+                                    grep -q '^1$'; then
+                                    echo "MongoDB is ready."
+                                    exit 0
+                                fi
+                                sleep 2
+                            done
+
+                            echo "MongoDB failed to become ready."
+                            sudo systemctl status mongod --no-pager || true
+                            exit 1
+                    '''
+                }
+            }
+        }
 
         stage('Deploy') {
             steps {
