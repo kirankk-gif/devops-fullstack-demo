@@ -2,10 +2,16 @@ pipeline {
     agent any
 
     environment {
-        DEPLOY_DIR  = '/var/www/html/api/task-abroad-api'
-        PM2_NAME    = 'task-abroad-api'
+        SERVER_IP  = '3.106.194.176'
+        DEPLOY_USER = 'ubuntu'
+
+        FRONTEND_DIR = '/var/www/html/devops-task/app'
+        BACKEND_DIR  = '/var/www/html/devops-task/api'
+
+        PM2_NAME = 'devops-task-api'
         DEPLOY_PORT = '4000'
-        SERVER_IP   = '3.25.151.231'
+
+        // Replace this with the correct .env object for this project.
         S3_ENV_PATH = 's3://kiran-ec2-s3-lab-7f29c1/task-abroad-api/.env'
     }
 
@@ -16,29 +22,59 @@ pipeline {
             }
         }
 
-        stage('Install Dependencies') {
+        stage('Check Jenkins Requirements') {
             steps {
-                dir('server') {
+                sh '''
+                    set -eu
+
+                    for cmd in git node npm ssh rsync; do
+                        command -v "$cmd" >/dev/null || {
+                            echo "Missing requirement: $cmd"
+                            exit 1
+                        }
+                    done
+
+                    node --version
+                    npm --version
+                    git --version
+                    ssh -V
+                    rsync --version | head -n 1
+
+                    test -f client/package.json
+                    test -f server/package.json
+
+                    echo "Jenkins requirements checked."
+                '''
+            }
+        }
+
+        stage('Build Frontend') {
+            steps {
+                dir('client') {
                     sh '''
                         set -eu
-                        npm install
+                        npm ci
+                        npm run build
+                        test -d dist
+                        test -f dist/index.html
                     '''
                 }
             }
         }
 
-        stage('Test') {
+        stage('Test Backend') {
             steps {
                 dir('server') {
                     sh '''
                         set -eu
+                        npm ci
                         npm test
                     '''
                 }
             }
         }
-        
-        stage('Setup MongoDB') {
+
+        stage('Check EC2 Requirements') {
             steps {
                 withCredentials([
                     sshUserPrivateKey(
@@ -50,48 +86,25 @@ pipeline {
                     sh '''
                         set -eu
 
-                        SSH_OPTS="-i $SSH_KEY -p 22 \
-                            -o BatchMode=yes \
-                            -o StrictHostKeyChecking=yes"
+                        SSH_OPTS="-i $SSH_KEY \
+                          -o BatchMode=yes \
+                          -o StrictHostKeyChecking=yes"
 
-                        ssh $SSH_OPTS "$SSH_USER@$SERVER_IP" 'bash -se' <<'REMOTE'
+                        ssh $SSH_OPTS "$SSH_USER@$SERVER_IP" '
                             set -eu
-
-                            if ! command -v mongod >/dev/null 2>&1; then
-                                echo "MongoDB is not installed. Installing MongoDB Community 8.0..."
-
-                                sudo apt-get update
-                                sudo apt-get install -y gnupg curl
-
-                                curl -fsSL https://pgp.mongodb.com/server-8.0.asc |
-                                    sudo gpg --dearmor \
-                                    -o /usr/share/keyrings/mongodb-server-8.0.gpg
-
-                                echo "deb [ arch=amd64,arm64 signed-by=/usr/share/keyrings/mongodb-server-8.0.gpg ] https://repo.mongodb.org/apt/ubuntu noble/mongodb-org/8.0 multiverse" |
-                                    sudo tee /etc/apt/sources.list.d/mongodb-org-8.0.list
-
-                                sudo apt-get update
-                                sudo apt-get install -y mongodb-org
-                            else
-                                echo "MongoDB is already installed."
-                            fi
-
-                            sudo systemctl enable --now mongod
-
-                            for i in $(seq 1 15); do
-                                if mongosh --quiet \
-                                    "mongodb://127.0.0.1:27017/admin" \
-                                    --eval 'db.runCommand({ ping: 1 }).ok' |
-                                    grep -q '^1$'; then
-                                    echo "MongoDB is ready."
-                                    exit 0
-                                fi
-                                sleep 2
+                            for cmd in node npm aws pm2 nginx; do
+                                command -v "$cmd" >/dev/null || {
+                                    echo "Missing EC2 requirement: $cmd"
+                                    exit 1
+                                }
                             done
 
-                            echo "MongoDB failed to become ready."
-                            sudo systemctl status mongod --no-pager || true
-                            exit 1
+                            node --version
+                            npm --version
+                            aws --version
+                            pm2 --version
+                            nginx -v
+                        '
                     '''
                 }
             }
@@ -109,58 +122,94 @@ pipeline {
                     sh '''
                         set -eu
 
-                        SSH_OPTS="-i $SSH_KEY -p 22 \
-                            -o BatchMode=yes \
-                            -o StrictHostKeyChecking=no"
+                        SSH_OPTS="-i $SSH_KEY \
+                          -o BatchMode=yes \
+                          -o StrictHostKeyChecking=yes"
 
-                        echo "Creating deployment directory..."
-    
+                        echo "Preparing deployment directories..."
+
                         ssh $SSH_OPTS "$SSH_USER@$SERVER_IP" \
-                            "sudo -n /usr/bin/mkdir -p '$DEPLOY_DIR'"
+                          "sudo -n mkdir -p '$FRONTEND_DIR' '$BACKEND_DIR'"
 
-                        echo "Copying backend files..."
+                        echo "Copying frontend dist..."
+
+                        rsync -az --delete \
+                          -e "ssh $SSH_OPTS" \
+                          client/dist/ \
+                          "$SSH_USER@$SERVER_IP:/tmp/devops-task-dist/"
+
+                        ssh $SSH_OPTS "$SSH_USER@$SERVER_IP" \
+                          "sudo -n rsync -a --delete \
+                           /tmp/devops-task-dist/ '$FRONTEND_DIR/'"
+
+                        echo "Copying backend source..."
 
                         rsync -az \
-                            -e "ssh -i $SSH_KEY -p 22 \
-                                -o BatchMode=yes \
-                                -o StrictHostKeyChecking=no" \
-                            --exclude='.env' \
-                            --exclude='node_modules/' \
-                            "$WORKSPACE/server/" \
-                            "$SSH_USER@$SERVER_IP:$DEPLOY_DIR/"
+                          -e "ssh $SSH_OPTS" \
+                          --exclude='.env' \
+                          --exclude='node_modules/' \
+                          server/ \
+                          "$SSH_USER@$SERVER_IP:/tmp/devops-task-api/"
 
-                        echo "Downloading .env from S3..."
+                        echo "Deploying backend and environment..."
 
-                        ssh -i "$SSH_KEY" \
-                            -p 22 \
-                            -o BatchMode=yes \
-                            -o StrictHostKeyChecking=no \
-                            "$SSH_USER@$SERVER_IP" \
-                            "aws s3 cp '$S3_ENV_PATH' '$DEPLOY_DIR/.env' &&
-                            chmod 600 '$DEPLOY_DIR/.env'"
+                        ssh $SSH_OPTS "$SSH_USER@$SERVER_IP" '
+                            set -eu
 
-                        echo "Installing production dependencies and restarting..."
+                            sudo -n rsync -a \
+                              --exclude=".env" \
+                              /tmp/devops-task-api/ \
+                              "'"$BACKEND_DIR"'/"
 
-                        ssh $SSH_OPTS "$SSH_USER@$SERVER_IP" \
-                            "cd '$DEPLOY_DIR' &&
-                             npm install --omit=dev &&
-                             if pm2 describe '$PM2_NAME' >/dev/null 2>&1; then
-                                 pm2 restart '$PM2_NAME' --update-env;
-                             else
-                                 pm2 start src/server.js --name '$PM2_NAME';
-                             fi &&
-                             pm2 save"
+                            # Download secrets directly on EC2.
+                            sudo -n aws s3 cp \
+                              "'"$S3_ENV_PATH"'" \
+                              "'"$BACKEND_DIR"'/.env"
 
-                        echo "Waiting for the backend to start..."
+                            sudo -n chmod 600 "'"$BACKEND_DIR"'/.env"
+
+                            cd "'"$BACKEND_DIR"'"
+
+                            # Install production dependencies on EC2.
+                            sudo -n npm ci --omit=dev
+
+                            # Confirm that the required environment values exist
+                            # without printing secret values.
+                            sudo -n node -e "
+                              require('dotenv').config();
+                              if (!process.env.MONGODB_URI ||
+                                  !process.env.JWT_SECRET) {
+                                console.error('Required environment variable missing');
+                                process.exit(1);
+                              }
+                              console.log('Required environment variables exist');
+                            "
+
+                            # Start or restart the API.
+                            if sudo -n pm2 describe "'"$PM2_NAME"'" >/dev/null 2>&1; then
+                                sudo -n pm2 restart "'"$PM2_NAME"'" --update-env
+                            else
+                                sudo -n pm2 start src/server.js \
+                                  --name "'"$PM2_NAME"'"
+                            fi
+
+                            sudo -n pm2 save
+                        '
+
+                        echo "Checking backend health..."
+
                         sleep 3
 
-                        echo "Verifying backend health on target server..."
-
                         ssh $SSH_OPTS "$SSH_USER@$SERVER_IP" \
-                            "curl --fail --silent --show-error \
-                             http://$SERVER_IP:$DEPLOY_PORT/api/health"
+                          "curl --fail --silent --show-error \
+                           http://127.0.0.1:$DEPLOY_PORT/api/health"
 
-                        echo "Remote deployment and health check completed."
+                        echo "Checking public website..."
+
+                        curl --fail --silent --show-error \
+                          "http://$SERVER_IP/" >/dev/null
+
+                        echo "Deployment and basic health checks passed."
                     '''
                 }
             }
@@ -169,11 +218,10 @@ pipeline {
 
     post {
         success {
-            echo 'Deployment and verification successful.'
+            echo 'Deployment completed successfully.'
         }
-
         failure {
-            echo 'Pipeline failed. Check the stage logs.'
+            echo 'Deployment failed. Review the failed stage logs.'
         }
     }
 }
